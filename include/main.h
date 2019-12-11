@@ -35,7 +35,7 @@
 
 typedef enum
 {   
-    LoRa_VEH_CMD_START
+    LoRa_VEH_CMD_START = 1
     ,LoRa_VEH_CMD_LOCK
     ,LoRa_VEH_CMD_UNLOCK
 }LoRa_VEHICLE_CMDS;

@@ -39,11 +39,11 @@ void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize);
  */
 
 /**
- * @brief The UUID for this device. Stored as individual
+ * @brief The NULL terminated UUID for this device. Stored as individual
  *        chars to save space.
  * 
  */
-const char kpszRemoteStartUuid[] = {0x6e,0x2c,0xab,0x63,0xe4,0x64,0x4f,0x57,0xa0,0xe7,0x70,0x6a,0x98,0xe3,0x1a,0xc3};
+const char kpszRemoteStartUuid[] = {0x6e,0x2c,0xab,0x63,0xe4,0x64,0x4f,0x57,0xa0,0xe7,0x70,0x6a,0x98,0xe3,0x1a,0xc3,0x00};
 
 /* Setup the OLED display at address 0x3c using standard SDA and SCL */
 SSD1306 oledDisplay(0x3c,SDA,SCL);
@@ -57,8 +57,8 @@ const uint8_t kubLoraIrqPin = 26;
 const uint8_t kubLoraRstPin = 0;  //Throwaway pin Rst not actually connected.
 
 
-char startTruck = 0x01;
-char pszTestMessage[17];
+char startTruck[2] = {0x01,0x00};
+char pszTestMessage[18];
 
 
 
@@ -109,13 +109,14 @@ void setup()
     else
     {
       oledDisplay.drawString(0,0,"LoRa Initialized"); 
+      oledDisplay.display(); 
     }
     
     //LoRa.onReceive(vLoRaOnReceiveMsg);
     //vLoRa_rxMode();
 
     strcpy(pszTestMessage, kpszRemoteStartUuid);
-    strcat(pszTestMessage, &startTruck);
+    strcat(pszTestMessage, startTruck);
 
     /*Send Response Message */
     vLoRa_txMode();
@@ -123,8 +124,6 @@ void setup()
     LoRa.print(pszTestMessage);
     LoRa.endPacket();
     vLoRa_rxMode();
-
-    oledDisplay.display(); 
 }
 
 /**
@@ -195,13 +194,13 @@ void vLoRaOnReceiveMsg(int swPacketSize)
 
     if(20 >= swPacketSize)
     {
-        pszMsgString = (char*)malloc(swPacketSize);
+        pszMsgString = (char*)malloc(swPacketSize + 1);
     }
     
 
     oledDisplay.clear();
     oledDisplay.drawString(0,0, "LoRa msg received.");
-    oledDisplay.drawString(0,0, "Size: " + swPacketSize);
+    oledDisplay.drawString(0,15, "Size: " + String(swPacketSize,DEC));
     
     for(ubCount=0; 
         (ubCount < swPacketSize) && LoRa.available() && (nullptr != pszMsgString);
@@ -234,17 +233,17 @@ void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize)
         {
             case LoRa_VEH_CMD_START:
                 
-                oledDisplay.drawString(0,15,"START");
+                oledDisplay.drawString(0,30,"START");
                 break;
 
             case LoRa_VEH_CMD_LOCK:
                 
-                oledDisplay.drawString(0,15,"LOCK");
+                oledDisplay.drawString(0,30,"LOCK");
                 break;
 
             case LoRa_VEH_CMD_UNLOCK:
                 
-                oledDisplay.drawString(0,15,"UNLOCK");
+                oledDisplay.drawString(0,30,"UNLOCK");
                 break;
 
             default:
@@ -252,7 +251,7 @@ void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize)
         }
 
         /* Print LoRa Status */
-        oledDisplay.drawString(0,30, "RSSI " + String(LoRa.packetRssi(), DEC));
+        oledDisplay.drawString(0,45, "RSSI " + String(LoRa.packetRssi(), DEC));
 
     }
 }
