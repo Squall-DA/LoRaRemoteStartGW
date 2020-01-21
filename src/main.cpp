@@ -16,7 +16,13 @@
 #include <stdlib.h>
 #include "LoRa.h"
 #include "SSD1306.h"
+#include "IotWebConf.h"
 
+/*========================================================================*
+ * SECTION - Local defines                                                *
+ * =======================================================================*
+ */
+#define CONFIG_VERSION "lra1"
 
 /*========================================================================* 
  *  SECTION - External variables that cannot be defined in header files   * 
@@ -32,6 +38,7 @@ void vLoRa_rxMode(void);
 void vLoRa_txMode(void);
 void vLoRaOnReceiveMsg(int swPacketSize);
 void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize);
+void handleRoot(void);
 
 /*========================================================================* 
  *  SECTION - Local variables                                             * 
@@ -56,6 +63,14 @@ const uint8_t kubLoraCsPin = 18;
 const uint8_t kubLoraIrqPin = 26;
 const uint8_t kubLoraRstPin = 0;  //Throwaway pin Rst not actually connected.
 
+/* DNS and webserver setup */
+DNSServer dnsServer;
+WebServer webServer(80);
+
+/* IotWebConf specific */
+const char thingName[] = "LoRaGW";
+const char wifiInitApPass[] = "LoRaPa55word";
+IotWebConf iotWebConf(thingName, &dnsServer, &webServer, wifiInitApPass);
 
 char startTruck[2] = {0x01,0x00};
 char pszTestMessage[18];
@@ -92,6 +107,13 @@ void setup()
     Serial.begin(115200);
 
     while (!Serial);
+
+    /* init iotWebConf class */ 
+    iotWebConf.init();
+
+    webServer.on("/", handleRoot);
+    webServer.on("/config", []{ iotWebConf.handleConfig(); });
+    webServer.onNotFound([](){ iotWebConf.handleNotFound(); });
 
     /* Configure ESP32 SPI */
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
@@ -146,6 +168,8 @@ void loop()
     { 
         vLoRaOnReceiveMsg(packetSize);  
     }
+
+    iotWebConf.doLoop();
 
     delay(10);
 }
@@ -254,4 +278,23 @@ void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize)
         oledDisplay.drawString(0,45, "RSSI " + String(LoRa.packetRssi(), DEC));
 
     }
+}
+
+/**
+ * Handle web requests to "/" path.
+ */
+void handleRoot(void)
+{
+  // -- Let IotWebConf test and handle captive portal requests.
+  if (iotWebConf.handleCaptivePortal())
+  {
+    // -- Captive portal request were already served.
+    return;
+  }
+  String s = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\"/>";
+  s += "<title>IotWebConf 01 Minimal</title></head><body>Hello world!";
+  s += "Go to <a href='config'>configure page</a> to change settings.";
+  s += "</body></html>\n";
+
+  webServer.send(200, "text/html", s);
 }
