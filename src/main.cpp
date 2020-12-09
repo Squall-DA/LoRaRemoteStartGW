@@ -11,12 +11,31 @@
 
 /* Includes */
 #include "main.h"
+#include <WiFi.h>
 
+/*
+This project uses FreeRTOS softwaretimers as there is no built-in Ticker library
+*/
+extern "C" {
+	#include "freertos/FreeRTOS.h"
+	#include "freertos/timers.h"
+}
+#include <AsyncMqttClient.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include "LoRa.h"
 #include "SSD1306.h"
 
+
+/*========================================================================* 
+ *  SECTION - Local Defines                                               * 
+ *========================================================================* 
+ */
+#define WIFI_SSID "yourSSID"
+#define WIFI_PASSWORD "yourpass"
+
+#define MQTT_HOST "test.mosquitto.com"
+#define MQTT_PORT 8883
 
 /*========================================================================* 
  *  SECTION - External variables that cannot be defined in header files   * 
@@ -32,6 +51,23 @@ void vLoRa_rxMode(void);
 void vLoRa_txMode(void);
 void vLoRaOnReceiveMsg(int swPacketSize);
 void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize);
+void connectToWifi(void);
+
+void connectToMqtt(void);
+
+void WiFiEvent(WiFiEvent_t event);
+
+void onMqttConnect(bool sessionPresent);
+
+void onMqttDisconnect(AsyncMqttClientDisconnectReason reason);
+
+void onMqttSubscribe(uint16_t packetId, uint8_t qos);
+
+void onMqttUnsubscribe(uint16_t packetId);
+
+void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total);
+
+void onMqttPublish(uint16_t packetId);
 
 /*========================================================================* 
  *  SECTION - Local variables                                             * 
@@ -59,6 +95,10 @@ const uint8_t kubLoraRstPin = 0;  //Throwaway pin Rst not actually connected.
 
 char startTruck[2] = {0x01,0x00};
 char pszTestMessage[18];
+
+AsyncMqttClient mqttClient;
+TimerHandle_t mqttReconnectTimer;
+TimerHandle_t wifiReconnectTimer;
 
 
 
@@ -93,6 +133,23 @@ void setup()
 
     while (!Serial);
 
+    mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
+    wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWifi));
+
+    WiFi.onEvent(WiFiEvent);
+
+    mqttClient.onConnect(onMqttConnect);
+    mqttClient.onDisconnect(onMqttDisconnect);
+    mqttClient.onSubscribe(onMqttSubscribe);
+    mqttClient.onUnsubscribe(onMqttUnsubscribe);
+    mqttClient.onMessage(onMqttMessage);
+    mqttClient.onPublish(onMqttPublish);
+    mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+    mqttClient.setSecure(true);
+    mqttClient.setRootCa("",0);
+
+    connectToWifi();
+
     /* Configure ESP32 SPI */
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
 
@@ -112,17 +169,7 @@ void setup()
       oledDisplay.display(); 
     }
     
-    //LoRa.onReceive(vLoRaOnReceiveMsg);
-    //vLoRa_rxMode();
 
-    strcpy(pszTestMessage, kpszRemoteStartUuid);
-    strcat(pszTestMessage, startTruck);
-
-    /*Send Response Message */
-    vLoRa_txMode();
-    LoRa.beginPacket();
-    LoRa.print(pszTestMessage);
-    LoRa.endPacket();
     vLoRa_rxMode();
 }
 
@@ -148,6 +195,98 @@ void loop()
     }
 
     delay(10);
+}
+
+void connectToWifi() {
+  Serial.println("Connecting to Wi-Fi...");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
+
+void connectToMqtt() {
+  Serial.println("Connecting to MQTT...");
+  mqttClient.connect();
+}
+
+void WiFiEvent(WiFiEvent_t event) {
+    Serial.printf("[WiFi-event] event: %d\n", event);
+    switch(event) {
+    case SYSTEM_EVENT_STA_GOT_IP:
+        Serial.println("WiFi connected");
+        Serial.println("IP address: ");
+        Serial.println(WiFi.localIP());
+        connectToMqtt();
+        break;
+    case SYSTEM_EVENT_STA_DISCONNECTED:
+        Serial.println("WiFi lost connection");
+        xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+		xTimerStart(wifiReconnectTimer, 0);
+        break;
+    default:
+        break;
+    }
+}
+
+void onMqttConnect(bool sessionPresent) {
+  Serial.println("Connected to MQTT.");
+  Serial.print("Session present: ");
+  Serial.println(sessionPresent);
+  uint16_t packetIdSub = mqttClient.subscribe("test/lol", 2);
+  Serial.print("Subscribing at QoS 2, packetId: ");
+  Serial.println(packetIdSub);
+  mqttClient.publish("test/lol", 0, true, "test 1");
+  Serial.println("Publishing at QoS 0");
+  uint16_t packetIdPub1 = mqttClient.publish("test/lol", 1, true, "test 2");
+  Serial.print("Publishing at QoS 1, packetId: ");
+  Serial.println(packetIdPub1);
+  uint16_t packetIdPub2 = mqttClient.publish("test/lol", 2, true, "test 3");
+  Serial.print("Publishing at QoS 2, packetId: ");
+  Serial.println(packetIdPub2);
+}
+
+void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
+  Serial.println("Disconnected from MQTT.");
+
+  if (WiFi.isConnected()) {
+    xTimerStart(mqttReconnectTimer, 0);
+  }
+}
+
+void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
+  Serial.println("Subscribe acknowledged.");
+  Serial.print("  packetId: ");
+  Serial.println(packetId);
+  Serial.print("  qos: ");
+  Serial.println(qos);
+}
+
+void onMqttUnsubscribe(uint16_t packetId) {
+  Serial.println("Unsubscribe acknowledged.");
+  Serial.print("  packetId: ");
+  Serial.println(packetId);
+}
+
+void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
+  Serial.println("Publish received.");
+  Serial.print("  topic: ");
+  Serial.println(topic);
+  Serial.print("  qos: ");
+  Serial.println(properties.qos);
+  Serial.print("  dup: ");
+  Serial.println(properties.dup);
+  Serial.print("  retain: ");
+  Serial.println(properties.retain);
+  Serial.print("  len: ");
+  Serial.println(len);
+  Serial.print("  index: ");
+  Serial.println(index);
+  Serial.print("  total: ");
+  Serial.println(total);
+}
+
+void onMqttPublish(uint16_t packetId) {
+  Serial.println("Publish acknowledged.");
+  Serial.print("  packetId: ");
+  Serial.println(packetId);
 }
 
 /**
@@ -192,7 +331,7 @@ void vLoRaOnReceiveMsg(int swPacketSize)
     char * pszMsgString = nullptr;
     uint8_t ubCount = 0;
 
-    if(20 >= swPacketSize)
+    if(256 >= swPacketSize)
     {
         pszMsgString = (char*)malloc(swPacketSize + 1);
     }
@@ -202,16 +341,17 @@ void vLoRaOnReceiveMsg(int swPacketSize)
     oledDisplay.drawString(0,0, "LoRa msg received.");
     oledDisplay.drawString(0,15, "Size: " + String(swPacketSize,DEC));
     
-    for(ubCount=0; 
-        (ubCount < swPacketSize) && LoRa.available() && (nullptr != pszMsgString);
-        ubCount++)
-    {
-        pszMsgString[ubCount] = LoRa.read();
-    }
-
-    /* Process the message then free the message buffer */
     if(nullptr != pszMsgString)
     {
+
+        for(ubCount=0; 
+            (ubCount < swPacketSize) && LoRa.available();
+            ubCount++)
+        {
+            pszMsgString[ubCount] = LoRa.read();
+        }
+
+        /* Process the message then free the message buffer */
         gvProcessLoRaMessage(pszMsgString, swPacketSize);
         free(pszMsgString);
     }
