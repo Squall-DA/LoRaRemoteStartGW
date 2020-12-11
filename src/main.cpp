@@ -38,10 +38,7 @@ extern "C" {
  *  SECTION - Local Defines                                               * 
  *========================================================================* 
  */
-#define WIFI_SSID "yourSSID"
-#define WIFI_PASSWORD "yourpass"
-
-#define MQTT_HOST "test.mosquitto.com"
+#define MQTT_HOST "test.mosquitto.org"
 #define MQTT_PORT 8883
 
 /*========================================================================* 
@@ -59,22 +56,13 @@ void vLoRa_txMode(void);
 void vLoRaOnReceiveMsg(int swPacketSize);
 void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize);
 void handleRoot(void);
-void connectToWifi(void);
-
 void connectToMqtt(void);
-
 void WiFiEvent(WiFiEvent_t event);
-
 void onMqttConnect(bool sessionPresent);
-
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason);
-
 void onMqttSubscribe(uint16_t packetId, uint8_t qos);
-
 void onMqttUnsubscribe(uint16_t packetId);
-
 void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total);
-
 void onMqttPublish(uint16_t packetId);
 
 /*========================================================================* 
@@ -114,7 +102,6 @@ char pszTestMessage[18];
 
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
-TimerHandle_t wifiReconnectTimer;
 
 
 
@@ -156,7 +143,6 @@ void setup()
     webServer.on("/config", []{ iotWebConf.handleConfig(); });
     webServer.onNotFound([](){ iotWebConf.handleNotFound(); });
     mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
-    wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWifi));
 
     WiFi.onEvent(WiFiEvent);
 
@@ -169,8 +155,6 @@ void setup()
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
     mqttClient.setSecure(true);
     mqttClient.setRootCa("",0);
-
-    connectToWifi();
 
     /* Configure ESP32 SPI */
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
@@ -221,11 +205,6 @@ void loop()
     delay(10);
 }
 
-void connectToWifi() {
-  Serial.println("Connecting to Wi-Fi...");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-}
-
 void connectToMqtt() {
   Serial.println("Connecting to MQTT...");
   mqttClient.connect();
@@ -243,7 +222,6 @@ void WiFiEvent(WiFiEvent_t event) {
     case SYSTEM_EVENT_STA_DISCONNECTED:
         Serial.println("WiFi lost connection");
         xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
-		xTimerStart(wifiReconnectTimer, 0);
         break;
     default:
         break;
