@@ -10,8 +10,7 @@
  */
 
 /* Includes */
-#include "main.h"
-#include <WiFi.h>
+#include "APP_LoRa.h"
 
 /*
 This project uses FreeRTOS softwaretimers as there is no built-in Ticker library
@@ -23,10 +22,13 @@ extern "C" {
 #include <AsyncMqttClient.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <WiFi.h>
 #include "LoRa.h"
 #include "SSD1306.h"
 #include "IotWebConf.h"
 
+/* Self Include */
+#include "main.h"
 
 /*========================================================================*
  * SECTION - Local defines                                                *
@@ -51,10 +53,6 @@ extern "C" {
  *========================================================================* 
  */
 
-void vLoRa_rxMode(void);
-void vLoRa_txMode(void);
-void vLoRaOnReceiveMsg(int swPacketSize);
-void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize);
 void handleRoot(void);
 void connectToMqtt(void);
 void WiFiEvent(WiFiEvent_t event);
@@ -69,13 +67,6 @@ void onMqttPublish(uint16_t packetId);
  *  SECTION - Local variables                                             * 
  *========================================================================* 
  */
-
-/**
- * @brief The NULL terminated UUID for this device. Stored as individual
- *        chars to save space.
- * 
- */
-const char kpszRemoteStartUuid[] = {0x6e,0x2c,0xab,0x63,0xe4,0x64,0x4f,0x57,0xa0,0xe7,0x70,0x6a,0x98,0xe3,0x1a,0xc3,0x00};
 
 /* Setup the OLED display at address 0x3c using standard SDA and SCL */
 SSD1306 oledDisplay(0x3c,SDA,SCL);
@@ -167,7 +158,7 @@ void setup()
     {
         oledDisplay.drawString(0,0,"LoRa Init Error");
         oledDisplay.display();
-        while(1);
+        while(true);
     }
     else
     {
@@ -175,8 +166,10 @@ void setup()
       oledDisplay.display(); 
     }
     
+    LoRa.onReceive(gvAPP_LoRa_OnReceive);
+    LoRa.onTxDone(gvAPP_LoRa_OnTxDone);
 
-    vLoRa_rxMode();
+    gvLoRa_rxMode();
 }
 
 /**
@@ -194,15 +187,18 @@ void setup()
  */
 void loop() 
 {
-    int packetSize = LoRa.parsePacket();
-    if (packetSize) 
-    { 
-        vLoRaOnReceiveMsg(packetSize);  
-    }
+  if (runEvery(5000)) { // repeat every 5000 millis
+
+    String message = "HeLoRa World! ";
+    message += "I'm a Gateway! ";
+    message += millis();
+
+    LoRa_sendMessage(message); // send a message
+
+    Serial.println("Send Message!");
+  }
 
     iotWebConf.doLoop();
-
-    delay(10);
 }
 
 void connectToMqtt() {
@@ -291,112 +287,6 @@ void onMqttPublish(uint16_t packetId) {
   Serial.println(packetId);
 }
 
-/**
- * @fn     void vLoRa_rxMode(void)
- * 
- *  @brief  Sets the Gateway to receive mode
- *  
- *  @return N/A
- *
- *  @author Squall-DA
- *
- *  @note   N/A
- *
- */
-void vLoRa_rxMode(void){
-    LoRa.disableInvertIQ();               // Normal mode
-    LoRa.receive();                       // set receive mode
-}
-
-/**
- * @fn  void LoRa_txMode(void)
- * 
- * @brief Sets the gateway back to tx mode 
- * 
- */
-void vLoRa_txMode(void){
-  LoRa.idle();                          // set standby mode
-  LoRa.enableInvertIQ();                // active invert I and Q signals
-}
-
-/**
- * @fn    void vLoRaOnReceiveMsg(int swPacketSize)
- * 
- * @brief This function is a callback that is called any time
- *        the LoRa radio receives a message.
- * 
- * @param swPacketSize - size of the LoRa packet. 
- */
-void vLoRaOnReceiveMsg(int swPacketSize)
-{
-    /* Create temporary string the size of the message */
-    char * pszMsgString = nullptr;
-    uint8_t ubCount = 0;
-
-    if(256 >= swPacketSize)
-    {
-        pszMsgString = (char*)malloc(swPacketSize + 1);
-    }
-    
-
-    oledDisplay.clear();
-    oledDisplay.drawString(0,0, "LoRa msg received.");
-    oledDisplay.drawString(0,15, "Size: " + String(swPacketSize,DEC));
-    
-    if(nullptr != pszMsgString)
-    {
-
-        for(ubCount=0; 
-            (ubCount < swPacketSize) && LoRa.available();
-            ubCount++)
-        {
-            pszMsgString[ubCount] = LoRa.read();
-        }
-
-        /* Process the message then free the message buffer */
-        gvProcessLoRaMessage(pszMsgString, swPacketSize);
-        free(pszMsgString);
-    }
-
-    oledDisplay.display();
-}
-
-
-void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize)
-{
-    boolean fUuidMatch = false;
-
-    /* Compare the first UUID_LENGTH bytes */
-    fUuidMatch = !strncmp(kpszRemoteStartUuid, kpszLoraMessage, UUID_LENGTH);
-
-    if(fUuidMatch)
-    {
-        switch(kpszLoraMessage[UUID_LENGTH])
-        {
-            case LoRa_VEH_CMD_START:
-                
-                oledDisplay.drawString(0,30,"START");
-                break;
-
-            case LoRa_VEH_CMD_LOCK:
-                
-                oledDisplay.drawString(0,30,"LOCK");
-                break;
-
-            case LoRa_VEH_CMD_UNLOCK:
-                
-                oledDisplay.drawString(0,30,"UNLOCK");
-                break;
-
-            default:
-                break;
-        }
-
-        /* Print LoRa Status */
-        oledDisplay.drawString(0,45, "RSSI " + String(LoRa.packetRssi(), DEC));
-
-    }
-}
 
 /**
  * Handle web requests to "/" path.

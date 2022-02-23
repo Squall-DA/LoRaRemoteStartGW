@@ -5,7 +5,7 @@
  *  @date                   12/04/2017
  *  
  *  @remark Author:         Squall-DA
- *  @remark Project Tree:   BlynkRemoteStarter
+ *  @remark Project Tree:   LoRaRemoteStartGW
  *  
  */
 #ifndef MAIN_MODULE
