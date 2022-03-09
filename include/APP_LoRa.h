@@ -13,6 +13,7 @@
 
 #include <stdint.h>
 #include <Arduino.h>
+#include "RadioLib.h"
 
 /*========================================================================* 
  *  SECTION - Global definitions 
