@@ -35,14 +35,19 @@ void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize);
  *========================================================================* 
  */
 
-void vLoRa_rxMode(void){
-    LoRa.disableInvertIQ();               // Normal mode
-    LoRa.receive();                       // set receive mode
+LoraApp::LoraApp(uint8_t ubCsPin = LORA_CS,uint8_t ubIrqPin = LORA_IRQ, uint8_t ubRstPin = LORA_RST, uint8_t ubDio1Pin = 255U) :
+radio(new Module(ubCsPin,ubIrqPin,ubRstPin,ubDio1Pin))
+{
+    SPI.begin();
 }
 
-void vLoRa_txMode(void){
-  LoRa.idle();                          // set standby mode
-  LoRa.enableInvertIQ();                // active invert I and Q signals
+void LoraApp::vRxMode(void){
+    radio.invertIQ(false);
+    radio.startReceive();
+}
+
+void LoraApp::vTxMode(void){
+    radio.invertIQ(true);
 }
 
 void LoRa_sendMessage(String message) {

@@ -30,6 +30,16 @@
  *========================================================================* 
  */
 
+class LoraApp {
+    public:
+        LoraApp(uint8_t _ubCsPin,uint8_t _ubIrqPin, uint8_t _ubRstPin, uint8_t _ubDio1Pin);
+        void vTxMode();
+        void vRxMode();
+        void vSendMessage(String message);
+
+    private:
+        SX1276 radio;
+}
 /**
  * @fn     void vLoRa_rxMode(void)
  * 

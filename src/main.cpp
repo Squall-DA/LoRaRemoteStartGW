@@ -23,7 +23,6 @@ extern "C" {
 #include <stdint.h>
 #include <stdlib.h>
 #include <WiFi.h>
-#include "LoRa.h"
 #include "SSD1306.h"
 #include "IotWebConf.h"
 
