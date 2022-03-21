@@ -35,10 +35,10 @@ void gvProcessLoRaMessage(char * const kpszLoraMessage, uint8_t ubMsgSize);
  *========================================================================* 
  */
 
-LoraApp::LoraApp(uint8_t ubCsPin = LORA_CS,uint8_t ubIrqPin = LORA_IRQ, uint8_t ubRstPin = LORA_RST, uint8_t ubDio1Pin = 255U) :
+LoraApp::LoraApp(uint8_t ubCsPin,uint8_t ubIrqPin, uint8_t ubRstPin, uint8_t ubDio1Pin, uint8_t ubSckPin, uint8_t ubMosiPin, uint8_t ubMisoPin) :
 radio(new Module(ubCsPin,ubIrqPin,ubRstPin,ubDio1Pin))
 {
-    SPI.begin();
+    SPI.begin(ubSckPin,ubMisoPin,ubMosiPin);
 }
 
 void LoraApp::vRxMode(void){

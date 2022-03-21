@@ -20,6 +20,15 @@
  *========================================================================* 
  */
 
+#ifndef LORA_SCK
+    #define LORA_SCK    5   // GPIO5 - SX1276 SCK
+    #define LORA_MISO   19  // GPIO19 - SX1276 MISO
+    #define LORA_MOSI   27  // GPIO27 - SX1276 MOSI
+    #define LORA_CS     18  // GPIO18 - SX1276 CS
+    #define LORA_RST    12  // GPIO14 - SX1276 RST
+    #define LORA_IRQ    26  // GPIO26 - SX1276 IRQ (interrupt request)
+#endif
+
 /*========================================================================* 
  *  SECTION - extern global variables (minimize global variable use)      * 
  *========================================================================* 
@@ -32,14 +41,14 @@
 
 class LoraApp {
     public:
-        LoraApp(uint8_t _ubCsPin,uint8_t _ubIrqPin, uint8_t _ubRstPin, uint8_t _ubDio1Pin);
+        LoraApp(uint8_t ubCsPin = LORA_CS,uint8_t ubIrqPin = LORA_IRQ, uint8_t ubRstPin = LORA_RST, uint8_t ubDio1Pin = 255U,uint8_t ubSckPin = LORA_SCK, uint8_t ubMosiPin = LORA_MOSI, uint8_t ubMisoPin = LORA_MISO);
         void vTxMode();
         void vRxMode();
         void vSendMessage(String message);
 
     private:
         SX1276 radio;
-}
+};
 /**
  * @fn     void vLoRa_rxMode(void)
  * 
